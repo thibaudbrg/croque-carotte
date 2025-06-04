@@ -1,0 +1,14 @@
+# Node modules
+node_modules/
+
+# Expo directories
+.expo/
+.cache/
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+expo-packager.log
+*.log
+logs/
