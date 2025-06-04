@@ -20,11 +20,13 @@ const styles = StyleSheet.create({
   cell: {
     width: 50,
     height: 50,
+    borderRadius: 25,
     borderWidth: 1,
     borderColor: '#333',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#a1d99b',
+    margin: 2,
   },
   hole: {
     backgroundColor: '#654321',

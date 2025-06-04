@@ -1,40 +1,79 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SafeAreaView, View, Text, Button, StyleSheet } from 'react-native';
 import { Game } from './src/game/Game';
-import { CardType } from './src/game/types';
+import { CardType, GameState } from './src/game/types';
 import { Board } from './src/components/Board';
-
-const game = new Game();
+import { Deck } from './src/components/Deck';
 
 export default function App() {
-  const [state, setState] = useState(game.state);
+  const [phase, setPhase] = useState<'menu' | 'playing' | 'result'>('menu');
+  const [game, setGame] = useState<Game | null>(null);
+  const [state, setState] = useState<GameState | null>(null);
   const [lastCard, setLastCard] = useState<CardType | null>(null);
   const [winner, setWinner] = useState<string | null>(null);
 
+  const startGame = () => {
+    const g = new Game();
+    setGame(g);
+    setState({ ...g.state });
+    setLastCard(null);
+    setWinner(null);
+    setPhase('playing');
+  };
+
   const handleTurn = () => {
+    if (!game) return;
     const result = game.takeTurn();
     setState({ ...game.state });
     setLastCard(result.card);
     if (result.winner) {
-      setWinner(result.winner.name);
+      setWinner(result.winner.id === 0 ? 'You' : 'Bot');
+      setPhase('result');
     }
   };
+
+  useEffect(() => {
+    if (phase === 'playing' && game && game.state.currentPlayer === 1) {
+      const t = setTimeout(handleTurn, 1000);
+      return () => clearTimeout(t);
+    }
+  }, [state, phase]);
+
+  if (phase === 'menu') {
+    return (
+      <SafeAreaView style={styles.center}>
+        <Text style={styles.title}>Croque Carotte 🥕</Text>
+        <Button title="Start" onPress={startGame} />
+      </SafeAreaView>
+    );
+  }
+
+  if (phase === 'result') {
+    return (
+      <SafeAreaView style={styles.center}>
+        <Text style={styles.title}>{winner === 'You' ? 'You win 🥳' : 'You lose 😢'}</Text>
+        <Button title="Restart" onPress={startGame} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!state) return null;
+
+  const current = game!.state.players[game!.state.currentPlayer];
 
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Croque Carotte</Text>
       <Board state={state} />
+      <View style={{ marginVertical: 20 }}>
+        {current.id === 0 && <Deck onDraw={handleTurn} />}
+      </View>
       {state.players.map(p => (
         <Text key={p.id} style={styles.text}>
           {p.name}: {p.lives} lives {p.eliminated ? '(eliminated)' : ''}
         </Text>
       ))}
       {lastCard && <Text style={styles.text}>Last card: {lastCard}</Text>}
-      {winner ? (
-        <Text style={styles.text}>Winner: {winner}</Text>
-      ) : (
-        <Button title="Next turn" onPress={handleTurn} />
-      )}
     </SafeAreaView>
   );
 }
@@ -51,5 +90,10 @@ const styles = StyleSheet.create({
   },
   text: {
     marginTop: 10,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
