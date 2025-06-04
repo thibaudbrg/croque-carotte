@@ -12,6 +12,8 @@ export interface Player {
   position: number;
   /** Remaining lives. */
   lives: number;
+  /** Whether the player has been eliminated. */
+  eliminated: boolean;
 }
 
 export interface GameState {

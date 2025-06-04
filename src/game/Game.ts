@@ -13,8 +13,8 @@ export class Game {
     // Two players: user and bot start at position 0 with some lives.
     this.deck = new CardDeck();
     const players: Player[] = [
-      { id: 0, name: 'You', position: 0, lives: startingLives },
-      { id: 1, name: 'Bot', position: 0, lives: startingLives },
+      { id: 0, name: 'You', position: 0, lives: startingLives, eliminated: false },
+      { id: 1, name: 'Bot', position: 0, lives: startingLives, eliminated: false },
     ];
     this.state = {
       boardSize,
@@ -42,10 +42,14 @@ export class Game {
         this.rotateCarrot();
         break;
     }
-    // Check win condition
-    if (player.position >= this.state.boardSize - 1) {
-      // Player reached the carrot at the top
+    // Check win condition by reaching the carrot
+    if (!player.eliminated && player.position >= this.state.boardSize - 1) {
       return { card, winner: player };
+    }
+    // Check if only one player remains
+    const remaining = this.state.players.filter(p => !p.eliminated);
+    if (remaining.length === 1) {
+      return { card, winner: remaining[0] };
     }
     this.nextTurn();
     return { card };
@@ -58,6 +62,9 @@ export class Game {
     if (this.state.holes.includes(player.position)) {
       player.lives -= 1;
       player.position = 0;
+      if (player.lives <= 0) {
+        player.eliminated = true;
+      }
     }
   }
 
@@ -68,13 +75,24 @@ export class Game {
       if (this.state.holes.includes(p.position)) {
         p.lives -= 1;
         p.position = 0;
+        if (p.lives <= 0) {
+          p.eliminated = true;
+        }
       }
     }
   }
 
   /** Switch active player. */
   private nextTurn() {
-    this.state.currentPlayer = (this.state.currentPlayer + 1) % this.state.players.length;
+    const total = this.state.players.length;
+    let next = (this.state.currentPlayer + 1) % total;
+    while (this.state.players[next].eliminated) {
+      next = (next + 1) % total;
+      if (next === this.state.currentPlayer) {
+        break; // all players eliminated (should be handled elsewhere)
+      }
+    }
+    this.state.currentPlayer = next;
   }
 
   /** Generate a random set of hole positions. */
