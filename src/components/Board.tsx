@@ -17,7 +17,9 @@ export function Board({ state }: Props) {
   const cols = 5;
 
   const renderCell = (index: number) => {
-    const playersHere = state.players.filter(p => p.position === index);
+    const playersHere = state.players.filter(
+      p => p.position === index && !p.eliminated,
+    );
     const isHole = state.holes.includes(index);
     return (
       <Cell key={index} hasHole={isHole}>

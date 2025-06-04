@@ -24,6 +24,11 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Croque Carotte</Text>
       <Board state={state} />
+      {state.players.map(p => (
+        <Text key={p.id} style={styles.text}>
+          {p.name}: {p.lives} lives {p.eliminated ? '(eliminated)' : ''}
+        </Text>
+      ))}
       {lastCard && <Text style={styles.text}>Last card: {lastCard}</Text>}
       {winner ? (
         <Text style={styles.text}>Winner: {winner}</Text>
