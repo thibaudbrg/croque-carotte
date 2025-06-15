@@ -43,7 +43,8 @@ flutter run -d macos
 
 **iOS Simulator**
 ```bash
-flutter run -d ios
+flutter build ios --release
+flutter run -d ios --release
 ```
 
 **Android Emulator/Device**
