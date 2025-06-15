@@ -2,7 +2,7 @@
 
 A Flutter implementation of the classic French board game "Croque-Carotte" (Bunny Hop). Race your rabbits to the carrot while avoiding trap holes!
 
-## 🎮 What is Croque-Carotte?
+## What is Croque-Carotte?
 
 **The Classic Family Race Game**
 - Control 5 rabbits racing across a 24-step board
@@ -16,7 +16,7 @@ A Flutter implementation of the classic French board game "Croque-Carotte" (Bunn
 - Dynamic trap system creates suspense
 - Multi-language support (English/French)
 
-## 🚀 How to Install & Play
+## How to Install & Play
 
 ### Prerequisites
 - Flutter SDK 3.8.1+
