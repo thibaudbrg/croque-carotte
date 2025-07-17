@@ -3,6 +3,7 @@ import 'package:croque_carotte/models/game_state.dart';
 import 'package:croque_carotte/models/game_card.dart';
 import 'package:croque_carotte/models/player.dart';
 import 'package:croque_carotte/models/rabbit.dart';
+import 'package:croque_carotte/models/tile.dart';
 import 'package:croque_carotte/widgets/deck_widget.dart';
 import 'package:croque_carotte/widgets/game_board_widget.dart';
 import 'package:croque_carotte/widgets/rabbit_selection_widget.dart';
@@ -32,6 +33,16 @@ class _GameScreenState extends State<GameScreen> {
   
   // Keys to access widgets for animations
   final GlobalKey<State<DeckWidget>> _deckKey = GlobalKey<State<DeckWidget>>();
+  final GlobalKey<GameBoardWidgetState> _gameBoardKey = GlobalKey<GameBoardWidgetState>();
+  
+  // Controller for triggering animations
+  void Function(GameCard, Player, Rabbit?)? _executeCardAnimationCallback;
+
+  void _handleCardAnimation(GameCard card, Player player, Rabbit? selectedRabbit) {
+    // This callback is called from GameBoardWidget to execute animations
+    print('Card animation callback called for ${card.type}');
+    // The actual animation is handled by GameBoardWidget
+  }
 
   @override
   void initState() {
@@ -161,9 +172,16 @@ class _GameScreenState extends State<GameScreen> {
     print('GameScreen: Current player turn: ${gameState.currentPlayerTurn}');
     print('GameScreen: Is game over: ${gameState.isGameOver}');
     print('GameScreen: Cards remaining before draw: ${gameState.deck.cardsRemaining}');
+    print('GameScreen: Current drawn card: ${currentDrawnCard?.title}');
     
     if (gameState.currentPlayerTurn != CurrentPlayer.human || gameState.isGameOver) {
       print('GameScreen: Cannot draw card - not human turn or game over');
+      return;
+    }
+
+    // Prevent drawing another card if there's already a card drawn but not yet played
+    if (currentDrawnCard != null) {
+      print('GameScreen: Cannot draw card - already have a card drawn (${currentDrawnCard!.title}) waiting for rabbit selection');
       return;
     }
 
@@ -213,19 +231,22 @@ class _GameScreenState extends State<GameScreen> {
   }
   
   bool _canRabbitMove(Rabbit rabbit, int steps) {
-    // Check if rabbit can move the specified steps without overshooting
+    // Check if rabbit can move the specified steps without overshooting or hitting holes
     int targetPosition = rabbit.position;
     int stepsToMove = steps;
     
     while (stepsToMove > 0) {
       targetPosition++;
       
-      if (targetPosition > GameState.numberOfSteps) {
-        print("_canRabbitMove: Rabbit ${rabbit.id} cannot move $steps steps - would overshoot (${targetPosition} > ${GameState.numberOfSteps})");
-        return false; // Would overshoot
+      // Check if position has a hole - holes block movement completely
+      if (targetPosition < gameState.board.length && 
+          gameState.board[targetPosition].type == TileType.hole && 
+          gameState.board[targetPosition].isTrapOpen) {
+        print("_canRabbitMove: Rabbit ${rabbit.id} cannot move $steps steps - hole at position $targetPosition blocks path");
+        return false; // Hole blocks the path
       }
       
-      // Check if position is occupied
+      // Check if position is occupied by another rabbit
       bool occupied = gameState.humanPlayer.rabbits.any((r) => r.isAlive && r.id != rabbit.id && r.position == targetPosition) ||
                       gameState.botPlayer.rabbits.any((r) => r.isAlive && r.position == targetPosition);
       
@@ -233,6 +254,12 @@ class _GameScreenState extends State<GameScreen> {
         stepsToMove--; // Count this as a valid step
       }
       // If occupied, we just continue to the next position (jumping over)
+    }
+    
+    // Check if final position would overshoot
+    if (targetPosition > GameState.numberOfSteps) {
+      print("_canRabbitMove: Rabbit ${rabbit.id} cannot move $steps steps - would overshoot (final position $targetPosition > ${GameState.numberOfSteps})");
+      return false; // Would overshoot
     }
     
     print("_canRabbitMove: Rabbit ${rabbit.id} can move $steps steps from ${rabbit.position} to $targetPosition");
@@ -294,7 +321,11 @@ class _GameScreenState extends State<GameScreen> {
       int finalPosition = _calculateFinalPosition(rabbit, steps);
       
       if (finalPosition != rabbit.position) {
-        // DON'T switch turn yet - wait for animation to complete
+        // For human players: Switch turn IMMEDIATELY to prevent drawing another card
+        // For bot players: Keep existing logic (wait for animation)
+        if (!player.isBot) {
+          _switchTurnImmediately();
+        }
         // Trigger animation in GameBoardWidget - this will update the rabbit position during animation
         _triggerRabbitMovementAnimation(player, rabbit, finalPosition, steps);
       } else {
@@ -302,8 +333,9 @@ class _GameScreenState extends State<GameScreen> {
         _switchTurn();
       }
     } else if (card.type == GameCardType.turnCarrot) {
-      gameState.rotateCarrot();
-      _switchTurn(); // Switch turn immediately for carrot cards
+      // Use animation system for carrot cards
+      print('Triggering carrot animation via GameBoardWidget');
+      _gameBoardKey.currentState?.executeCardAnimation(card, player, null);
     }
   }
   
@@ -314,12 +346,14 @@ class _GameScreenState extends State<GameScreen> {
     print("Calculating final position for rabbit ${rabbit.id}: $steps steps from $currentPos");
     
     // Use the same logic as in the animation path calculation
-    while (stepsRemaining > 0 && currentPos < GameState.numberOfSteps) {
+    while (stepsRemaining > 0) {
       int nextPos = currentPos + 1; // Always moving forward
       
-      if (nextPos > GameState.numberOfSteps) {
-        // Can't overshoot the carrot
-        print("Cannot move $steps steps - would overshoot carrot");
+      // Check if position has a hole - holes block movement completely
+      if (nextPos < gameState.board.length && 
+          gameState.board[nextPos].type == TileType.hole && 
+          gameState.board[nextPos].isTrapOpen) {
+        print("Cannot move $steps steps - hole at position $nextPos blocks path");
         return rabbit.position; // Return original position if can't move
       }
       
@@ -337,6 +371,12 @@ class _GameScreenState extends State<GameScreen> {
         stepsRemaining--;
         print("Valid step to position $currentPos (${steps - stepsRemaining}/$steps)");
       }
+    }
+    
+    // Check if final position would overshoot
+    if (currentPos > GameState.numberOfSteps) {
+      print("Cannot move $steps steps - would overshoot carrot (final position $currentPos > ${GameState.numberOfSteps})");
+      return rabbit.position; // Return original position if can't move
     }
     
     print("Final calculated position: $currentPos");
@@ -360,11 +400,21 @@ class _GameScreenState extends State<GameScreen> {
     print("Starting step-by-step SLIDING animation: rabbit ${rabbit.id} from $startPos to $finalPos");
     
     if (startPos == finalPos) {
-      // No movement needed, switch turn immediately
+      // No movement needed, clear animation flag and handle turn logic
       setState(() {
         _isAnimationInProgress = false;
       });
-      _switchTurn();
+      
+      // For bot players, we need to switch turn
+      // For human players, turn was already switched, just trigger bot if needed
+      if (player.isBot) {
+        _switchTurn();
+      } else {
+        // For human players, just trigger bot turn if needed
+        if (gameState.currentPlayerTurn == CurrentPlayer.bot && !gameState.isGameOver) {
+          _handleBotTurn();
+        }
+      }
       return;
     }
 
@@ -374,12 +424,22 @@ class _GameScreenState extends State<GameScreen> {
     print("Rabbit ${rabbit.id} movement path: $movementPath");
     
     if (movementPath.isEmpty) {
-      // No valid path found
+      // No valid path found, clear animation flag and handle turn logic
       print("No valid movement path found for rabbit ${rabbit.id}");
       setState(() {
         _isAnimationInProgress = false;
       });
-      _switchTurn();
+      
+      // For bot players, we need to switch turn
+      // For human players, turn was already switched, just trigger bot if needed
+      if (player.isBot) {
+        _switchTurn();
+      } else {
+        // For human players, just trigger bot turn if needed
+        if (gameState.currentPlayerTurn == CurrentPlayer.bot && !gameState.isGameOver) {
+          _handleBotTurn();
+        }
+      }
       return;
     }
     
@@ -390,8 +450,21 @@ class _GameScreenState extends State<GameScreen> {
       if (pathIndex >= movementPath.length || !mounted || gameState.isGameOver) {
         // Animation complete or interrupted
         if (mounted && !gameState.isGameOver) {
-          print("Sliding animation complete, switching turn");
-          _switchTurn();
+          print("Sliding animation complete");
+          setState(() {
+            _isAnimationInProgress = false;
+          });
+          
+          // For bot players, we need to switch turn after animation completes
+          // For human players, turn was already switched immediately
+          if (player.isBot) {
+            _switchTurn();
+          } else {
+            // For human players, just trigger bot turn if needed
+            if (gameState.currentPlayerTurn == CurrentPlayer.bot && !gameState.isGameOver) {
+              _handleBotTurn();
+            }
+          }
         } else {
           // Game over or widget unmounted, just clear the flag
           if (mounted) {
@@ -444,13 +517,15 @@ class _GameScreenState extends State<GameScreen> {
     
     print("Calculating path for rabbit ${rabbit.id}: $cardSteps card steps from $startPos");
     
-    while (stepsRemaining > 0 && currentPos < GameState.numberOfSteps) {
+    while (stepsRemaining > 0) {
       int nextPos = currentPos + 1; // Always moving forward
       
-      // Check if we've gone beyond the board
-      if (nextPos > GameState.numberOfSteps) {
-        print("Would overshoot board at position $nextPos");
-        break;
+      // Check if this position has a hole - holes block movement completely
+      if (nextPos < gameState.board.length && 
+          gameState.board[nextPos].type == TileType.hole && 
+          gameState.board[nextPos].isTrapOpen) {
+        print("Path blocked by hole at position $nextPos - cannot complete movement");
+        return []; // Return empty path if hole blocks movement
       }
       
       // Check if this position is occupied by another rabbit
@@ -469,6 +544,12 @@ class _GameScreenState extends State<GameScreen> {
         path.add(currentPos);
         print("Step to position $currentPos (${cardSteps - stepsRemaining}/$cardSteps)");
       }
+    }
+    
+    // Check if final position would overshoot
+    if (currentPos > GameState.numberOfSteps) {
+      print("Path would overshoot board at position $currentPos - cannot complete movement");
+      return []; // Return empty path if would overshoot
     }
     
     return path;
@@ -509,6 +590,19 @@ class _GameScreenState extends State<GameScreen> {
     if (gameState.currentPlayerTurn == CurrentPlayer.bot && !gameState.isGameOver) {
       _handleBotTurn();
     }
+  }
+  
+  void _switchTurnImmediately() {
+    // Switch turn immediately but don't trigger bot turn yet (animation in progress)
+    setState(() {
+      gameState.currentPlayerTurn = (gameState.currentPlayerTurn == CurrentPlayer.human) 
+          ? CurrentPlayer.bot 
+          : CurrentPlayer.human;
+      
+      _isAnimationInProgress = true; // Set animation flag to prevent bot from playing during animation
+    });
+    
+    print("Turn switched immediately to: ${gameState.currentPlayerTurn} (animation in progress)");
   }
 
   int _getCardSteps(GameCard card) {
@@ -762,13 +856,20 @@ class _GameScreenState extends State<GameScreen> {
                             return AspectRatio(
                               aspectRatio: 1,
                               child: GameBoardWidget(
+                                key: _gameBoardKey,
                                 gameState: gameState,
                                 boardSize: boardSize,
                                 showDebugInfo: false,
+                                onCardAnimation: _handleCardAnimation,
                                 onCardPlayed: (card, player, rabbit) {
                                   setState(() {
                                     // Update UI after card animation completes
                                   });
+                                  
+                                  // Handle turn switching for carrot cards
+                                  if (card.type == GameCardType.turnCarrot) {
+                                    _switchTurn();
+                                  }
                                 },
                               ),
                             );

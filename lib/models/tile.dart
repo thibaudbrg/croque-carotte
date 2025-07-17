@@ -1,7 +1,7 @@
 // Represents a tile on the game board
 class Tile {
   final int id;
-  final TileType type;
+  TileType type; // Made mutable so holes can be created dynamically
   bool isTrapOpen; // New field to indicate if a trapdoor tile is currently open
 
   Tile({

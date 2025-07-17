@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:croque_carotte/models/game_card.dart';
-import 'package:croque_carotte/models/player.dart';
 
 class DeckWidget extends StatefulWidget {
   final int cardsRemaining;
@@ -109,7 +108,15 @@ class _DeckWidgetState extends State<DeckWidget> with TickerProviderStateMixin {
 
   void _drawCard() {
     print('DeckWidget: _drawCard called, cardsRemaining: ${widget.cardsRemaining}');
+    print('DeckWidget: Current drawn card: ${widget.drawnCard?.title}');
+    
     if (_isDrawing) return; // Don't allow multiple draws at once
+    
+    // Don't allow drawing if there's already a card drawn but not yet played
+    if (widget.drawnCard != null) {
+      print('DeckWidget: Cannot draw card - already have a card drawn (${widget.drawnCard!.title}) waiting for action');
+      return;
+    }
     
     // Drawing from empty deck will automatically trigger reshuffle
     setState(() {
@@ -305,11 +312,13 @@ class _DeckWidgetState extends State<DeckWidget> with TickerProviderStateMixin {
         ),
         
         // Main deck
-        GestureDetector(
-          onTap: _drawCard, // Draws card; auto-reshuffles if deck is empty
-          child: SizedBox(
-            width: widget.width,
-            height: widget.height,
+        Column(
+          children: [
+            GestureDetector(
+              onTap: _drawCard, // Draws card; auto-reshuffles if deck is empty
+              child: SizedBox(
+                width: widget.width,
+                height: widget.height,
             child: Stack(
               alignment: Alignment.center,
               children: [
@@ -318,6 +327,9 @@ class _DeckWidgetState extends State<DeckWidget> with TickerProviderStateMixin {
                   AnimatedBuilder(
                     animation: _shuffleAnimationController,
                     builder: (context, child) {
+                      // Check if deck is disabled (already has a drawn card)
+                      bool isDeckDisabled = widget.drawnCard != null;
+                      
                       return Transform.rotate(
                         angle: (_shuffleRotationAnimation?.value ?? 0.0) * 3.14159 / 2,
                         child: Transform.scale(
@@ -326,13 +338,17 @@ class _DeckWidgetState extends State<DeckWidget> with TickerProviderStateMixin {
                             width: widget.width,
                             height: widget.height,
                             decoration: BoxDecoration(
-                              color: _isShuffling ? Colors.orange.shade600 : Colors.blueGrey.shade600,
+                              color: isDeckDisabled 
+                                  ? Colors.grey.shade400  // Disabled color
+                                  : (_isShuffling ? Colors.orange.shade600 : Colors.blueGrey.shade600),
                               borderRadius: BorderRadius.circular(8.0),
                               border: Border.all(
-                                color: _isShuffling ? Colors.orange.shade800 : Colors.blueGrey.shade800, 
+                                color: isDeckDisabled 
+                                    ? Colors.grey.shade600  // Disabled border
+                                    : (_isShuffling ? Colors.orange.shade800 : Colors.blueGrey.shade800), 
                                 width: 2
                               ),
-                              boxShadow: [
+                              boxShadow: isDeckDisabled ? [] : [  // No shadow when disabled
                                 BoxShadow(
                                   color: Colors.black.withOpacity(0.3),
                                   spreadRadius: _isShuffling ? 3 : 1,
@@ -342,11 +358,17 @@ class _DeckWidgetState extends State<DeckWidget> with TickerProviderStateMixin {
                               ],
                             ),
                             child: Center(
-                              child: Icon(
-                                _isShuffling ? Icons.shuffle : Icons.filter_none,
-                                color: Colors.white,
-                                size: _isShuffling ? 35 : 30,
-                              ),
+                              child: isDeckDisabled 
+                                  ? Icon(
+                                      Icons.block,  // Show blocked icon when disabled
+                                      color: Colors.white,
+                                      size: 30,
+                                    )
+                                  : Icon(
+                                      _isShuffling ? Icons.shuffle : Icons.filter_none,
+                                      color: Colors.white,
+                                      size: _isShuffling ? 35 : 30,
+                                    ),
                             ),
                           ),
                         ),
@@ -469,6 +491,20 @@ class _DeckWidgetState extends State<DeckWidget> with TickerProviderStateMixin {
               ],
             ),
           ),
+        ),
+            // Status text below deck
+            const SizedBox(height: 4),
+            Text(
+              widget.drawnCard != null 
+                  ? 'Select Rabbit'
+                  : 'Draw Card',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: widget.drawnCard != null ? Colors.orange : Colors.blueGrey.shade700,
+              ),
+            ),
+          ],
         ),
         
         // Bot player discard pile
